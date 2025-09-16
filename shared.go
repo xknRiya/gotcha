@@ -3,12 +3,11 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"gotcha/color"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
-
-	"gotcha/color"
 )
 
 type DiskUsage struct {
@@ -206,6 +205,14 @@ func GetShell() string {
 	shell := strings.Split(sh, "/")
 
 	return shell[len(shell)-1]
+}
+
+func GetBatteryCapacity() string {
+	out, err := exec.Command("cat", "/sys/class/power_supply/BAT0/capacity").Output()
+	if err != nil {
+		return unknown
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func GetDisksUsage() []DiskUsage {

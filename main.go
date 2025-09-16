@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"gotcha/color"
+
 	cfg "gotcha/config"
 )
 
@@ -112,6 +113,11 @@ func main() {
 				),
 			)
 		}
+	}
+
+	if !IsDisabled("battery") {
+		bat := GetBatteryCapacity()
+		info = append(info, fmt.Sprintf("%s %s%%", color.Colorize("battery:", art.Accent), bat))
 	}
 
 	m := max(len(info), len(art.Art))
