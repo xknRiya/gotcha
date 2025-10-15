@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"gotcha/color"
 )
@@ -227,60 +228,25 @@ func GetBatteryCapacity() string {
 }
 
 func GetDisksUsage() []DiskUsage {
-	out, err := exec.Command("df", "-B1").Output()
-	if err != nil {
-		return nil
-	}
-
-	lines := bytes.Split(out, []byte("\n"))
-	if len(lines) < 2 {
-		return nil
-	}
-
 	mounts := config["MOUNTS"]
 	if mounts == "" {
 		mounts = "/boot,/"
 	}
-
-	filterMap := make(map[string]bool)
-	for mount := range strings.SplitSeq(mounts, ",") {
-		filterMap[strings.TrimSpace(mount)] = true
-	}
-
 	var results []DiskUsage
 
-	for _, line := range lines[1:] {
-		if len(strings.TrimSpace(string(line))) == 0 {
-			continue
+	for mount := range strings.SplitSeq(mounts, ",") {
+		stat := syscall.Statfs_t{}
+		if err := syscall.Statfs(mount, &stat); err == nil {
+			totalSpace := uint64(stat.Blocks) * uint64(stat.Bsize)
+			occupiedSpace := totalSpace - (uint64(stat.Bfree) * uint64(stat.Bsize))
+			results = append(results, DiskUsage{
+				MountPoint: mount,
+				Used:       occupiedSpace,
+				Total:      totalSpace,
+				UsedPct:    float64(occupiedSpace) / float64(totalSpace) * 100,
+			})
 		}
-
-		cols := strings.Fields(string(line))
-		if len(cols) < 6 {
-			continue
-		}
-
-		mountPoint := cols[5]
-		if !filterMap[mountPoint] {
-			continue
-		}
-
-		total, err1 := strconv.ParseUint(cols[1], 10, 64)
-		used, err2 := strconv.ParseUint(cols[2], 10, 64)
-
-		if err1 != nil || err2 != nil || total == 0 {
-			continue
-		}
-
-		usedPct := float64(used) / float64(total) * 100
-
-		results = append(results, DiskUsage{
-			MountPoint: mountPoint,
-			Used:       used,
-			Total:      total,
-			UsedPct:    usedPct,
-		})
 	}
-
 	if len(results) == 0 {
 		return nil
 	}
@@ -321,16 +287,14 @@ func GetCPU() string {
 	if err != nil {
 		return unknown
 	}
-	lines := bytes.Split(cpuinfo, []byte("\n"))
+	lines := bytes.SplitSeq(cpuinfo, []byte("\n"))
 
-	var model string
-	for _, line := range lines {
-		if strings.HasPrefix(string(line), "model name") {
-			model = strings.TrimSpace(strings.TrimPrefix(string(line), "model name\t:"))
-			break
+	for line := range lines {
+		if out, ok := bytes.CutPrefix(line, []byte("model name\t:")); ok {
+			return string(out)
 		}
 	}
-	return model
+	return unknown
 }
 
 const PciIDsPath = "/usr/share/hwdata/pci.ids"
