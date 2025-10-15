@@ -2,10 +2,11 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
-	"regexp"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -82,6 +83,20 @@ func GetDistro() string {
 	return unknown
 }
 
+func GetPkgCount(dbPath string) (int, error) {
+	files, err := os.ReadDir(dbPath)
+	if err != nil {
+		return 0, err
+	}
+	pkgCount := 0
+	for _, file := range files {
+		if file.Type().IsDir() && file.Name()[0] != '.' {
+			pkgCount++
+		}
+	}
+	return pkgCount, nil
+}
+
 func GetPkgCounts() string {
 	counts := make(map[string]int)
 
@@ -114,19 +129,13 @@ func GetPkgCounts() string {
 	}
 
 	// pacman
-	if pathExists("/usr/bin/pacman") {
-		cmd := exec.Command("/usr/bin/pacman", "-Q")
-		if out, err := cmd.Output(); err == nil {
-			counts["pacman"] = bytes.Count(out, []byte{'\n'})
-		}
+	if pacmanPkgCount, err := GetPkgCount("/var/lib/pacman/local"); err == nil {
+		counts["pacman"] = pacmanPkgCount
 	}
 
 	// flatpak
-	if pathExists("/usr/bin/flatpak") {
-		cmd := exec.Command("/usr/bin/flatpak", "list")
-		if out, err := cmd.Output(); err == nil {
-			counts["flatpak"] = bytes.Count(out, []byte{'\n'})
-		}
+	if flatpakPkgCount, err := GetPkgCount("/var/lib/flatpak/app/"); err == nil {
+		counts["flatpak"] = flatpakPkgCount
 	}
 
 	s := ""
@@ -210,11 +219,11 @@ func GetShell() string {
 }
 
 func GetBatteryCapacity() string {
-	out, err := exec.Command("cat", "/sys/class/power_supply/BAT0/capacity").Output()
+	bat, err := os.ReadFile("/sys/class/power_supply/BAT0/capacity")
 	if err != nil {
 		return unknown
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(string(bat))
 }
 
 func GetDisksUsage() []DiskUsage {
@@ -324,16 +333,105 @@ func GetCPU() string {
 	return model
 }
 
+const PciIDsPath = "/usr/share/hwdata/pci.ids"
+
+func GetDeviceName(targetVendorID, targetDeviceID string) (string, error) {
+	data, err := os.ReadFile(PciIDsPath)
+	if err != nil {
+		return "", err
+	}
+
+	targetVendor := []byte(targetVendorID)
+	targetDevice := []byte(targetDeviceID)
+	vendorLen := len(targetVendor)
+	deviceLen := len(targetDevice)
+
+	var vendorName []byte
+	var vendorFound bool
+
+	start := 0
+	end := 0
+	n := len(data)
+
+	for end < n {
+		for end < n && data[end] != '\n' {
+			end++
+		}
+		line := data[start:end]
+		end++
+		start = end
+
+		if len(line) == 0 || line[0] == '#' {
+			continue
+		}
+
+		if line[0] != '\t' {
+			vendorFound = false
+			if len(line) > vendorLen && line[vendorLen] == ' ' &&
+				bytes.Equal(line[:vendorLen], targetVendor) {
+				vendorName = line[vendorLen+1:]
+				vendorFound = true
+			}
+			continue
+		}
+
+		if vendorFound {
+			i := 0
+			for i < len(line) && line[i] == '\t' {
+				i++
+			}
+			line = line[i:]
+
+			if len(line) > deviceLen && line[deviceLen] == ' ' &&
+				bytes.Equal(line[:deviceLen], targetDevice) {
+				deviceName := line[deviceLen+1:]
+
+				var out strings.Builder
+				out.Grow(len(vendorName) + 1 + len(deviceName))
+				out.Write(vendorName)
+				out.WriteByte(' ')
+				out.Write(deviceName)
+				return out.String(), nil
+			}
+		}
+	}
+
+	return "", errors.New("not found")
+}
+
+const (
+	VgaClassCode   = "0x030000\n"
+	pciDevicesPath = "/sys/bus/pci/devices/"
+)
+
 func GetGPU() string {
-	pciinfo, err := exec.Command("lspci").Output()
+	deviceDirs, err := os.ReadDir(pciDevicesPath)
 	if err != nil {
 		return unknown
 	}
-	re := regexp.MustCompile(`(?m)^[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-9]\s+VGA compatible controller:\s*(.*)$`)
-
-	matches := re.FindSubmatch(pciinfo)
-	if len(matches) > 1 {
-		return strings.TrimSpace(string(matches[1]))
+	for _, dir := range deviceDirs {
+		devicePath := filepath.Join(pciDevicesPath, dir.Name())
+		classFilePath := filepath.Join(devicePath, "class")
+		classContent, err := os.ReadFile(classFilePath)
+		if err != nil {
+			continue
+		}
+		if bytes.HasPrefix(classContent, []byte(VgaClassCode)) {
+			ueventPath := filepath.Join(devicePath, "uevent")
+			ueventContent, err := os.ReadFile(ueventPath)
+			if err != nil {
+				return unknown
+			}
+			for line := range strings.SplitSeq(string(ueventContent), "\n") {
+				if id, hasID := strings.CutPrefix(line, "PCI_ID="); hasID {
+					parts := strings.Split(id, ":")
+					if name, err := GetDeviceName(parts[0], parts[1]); err == nil {
+						return name
+					}
+					return unknown
+				}
+			}
+		}
 	}
 	return unknown
 }
