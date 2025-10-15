@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -321,4 +322,18 @@ func GetCPU() string {
 		}
 	}
 	return model
+}
+
+func GetGPU() string {
+	pciinfo, err := exec.Command("lspci").Output()
+	if err != nil {
+		return unknown
+	}
+	re := regexp.MustCompile(`(?m)^[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-9]\s+VGA compatible controller:\s*(.*)$`)
+
+	matches := re.FindSubmatch(pciinfo)
+	if len(matches) > 1 {
+		return strings.TrimSpace(string(matches[1]))
+	}
+	return unknown
 }

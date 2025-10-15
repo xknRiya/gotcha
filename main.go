@@ -85,6 +85,10 @@ func main() {
 		cpu := GetCPU()
 		info = append(info, fmt.Sprintf("%s %s", color.Colorize("cpu:", art.Accent), cpu))
 	}
+	if !IsDisabled("gpu") {
+		gpu := GetGPU()
+		info = append(info, fmt.Sprintf("%s %s", color.Colorize("gpu:", art.Accent), gpu))
+	}
 	if !IsDisabled("uptime") {
 		uptime := GetUptime()
 		info = append(info, fmt.Sprintf("%s %s", color.Colorize("uptime:", art.Accent), uptime))
