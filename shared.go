@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"gotcha/color"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
-
-	"gotcha/color"
 )
 
 type DiskUsage struct {
@@ -150,27 +149,10 @@ func GetPkgCounts() string {
 	return s
 }
 
-func GetMemoryUsage() string {
-	meminfo, err := os.ReadFile("/proc/meminfo")
-	if err != nil {
-		return unknown
-	}
-
-	var total, available uint64
-
-	lines := strings.SplitSeq(string(meminfo), "\n")
-	for line := range lines {
-		if val, ok := strings.CutPrefix(line, "MemTotal:"); ok {
-			total, _ = strconv.ParseUint(strings.Fields(strings.TrimSpace(val))[0], 10, 64)
-		} else if val, ok := strings.CutPrefix(line, "MemAvailable:"); ok {
-			available, _ = strconv.ParseUint(strings.Fields(strings.TrimSpace(val))[0], 10, 64)
-		}
-	}
-
+func ParseMeminfo(total uint64, available uint64) string {
 	if total == 0 {
 		return unknown
 	}
-
 	totalBytes := total * 1024
 	availableBytes := available * 1024
 	usedBytes := totalBytes - availableBytes
@@ -191,6 +173,31 @@ func GetMemoryUsage() string {
 		HumanBytes(totalBytes),
 		color.Colorize(fmt.Sprintf("%.1f%%", usedPct), usageColor),
 	)
+}
+
+func GetMemoryUsage() (string, string) {
+	meminfo, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return unknown, unknown
+	}
+
+	var total, available uint64
+	var swapTotal, swapFree uint64
+
+	lines := bytes.SplitSeq(meminfo, []byte{'\n'})
+	for line := range lines {
+		if val, ok := bytes.CutPrefix(line, []byte("MemTotal:")); ok {
+			total, _ = strconv.ParseUint(string(bytes.Fields(bytes.TrimSpace(val))[0]), 10, 64)
+		} else if val, ok := bytes.CutPrefix(line, []byte("MemAvailable:")); ok {
+			available, _ = strconv.ParseUint(string(bytes.Fields(bytes.TrimSpace(val))[0]), 10, 64)
+		} else if val, ok := bytes.CutPrefix(line, []byte("SwapTotal:")); ok {
+			swapTotal, _ = strconv.ParseUint(string(bytes.Fields(bytes.TrimSpace(val))[0]), 10, 64)
+		} else if val, ok := bytes.CutPrefix(line, []byte("SwapFree:")); ok {
+			swapFree, _ = strconv.ParseUint(string(bytes.Fields(bytes.TrimSpace(val))[0]), 10, 64)
+		}
+	}
+
+	return ParseMeminfo(total, available), ParseMeminfo(swapTotal, swapFree)
 }
 
 func GetUptime() string {

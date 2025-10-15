@@ -77,10 +77,6 @@ func main() {
 		kernel := GetKernel()
 		info = append(info, fmt.Sprintf("%s %s", color.Colorize("kernel:", art.Accent), kernel))
 	}
-	if !IsDisabled("memory") {
-		memoryUsage := GetMemoryUsage()
-		info = append(info, fmt.Sprintf("%s %s", color.Colorize("memory:", art.Accent), memoryUsage))
-	}
 	if !IsDisabled("cpu") {
 		cpu := GetCPU()
 		info = append(info, fmt.Sprintf("%s %s", color.Colorize("cpu:", art.Accent), cpu))
@@ -109,6 +105,11 @@ func main() {
 	if !IsDisabled("packages") {
 		pkgCounts := GetPkgCounts()
 		info = append(info, fmt.Sprintf("%s %s", color.Colorize("packages:", art.Accent), pkgCounts))
+	}
+	if !IsDisabled("memory") {
+		memoryUsage, swapUsage := GetMemoryUsage()
+		info = append(info, fmt.Sprintf("%s %s", color.Colorize("memory:", art.Accent), memoryUsage))
+		info = append(info, fmt.Sprintf("%s %s", color.Colorize("swap:", art.Accent), swapUsage))
 	}
 	if !IsDisabled("disks") {
 		for _, d := range GetDisksUsage() {
