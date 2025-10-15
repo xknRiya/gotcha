@@ -3,11 +3,12 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"gotcha/color"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"gotcha/color"
 )
 
 type DiskUsage struct {
@@ -303,4 +304,21 @@ func GetDE() string {
 	}
 
 	return de
+}
+
+func GetCPU() string {
+	cpuinfo, err := os.ReadFile("/proc/cpuinfo")
+	if err != nil {
+		return unknown
+	}
+	lines := bytes.Split(cpuinfo, []byte("\n"))
+
+	var model string
+	for _, line := range lines {
+		if strings.HasPrefix(string(line), "model name") {
+			model = strings.TrimSpace(strings.TrimPrefix(string(line), "model name\t:"))
+			break
+		}
+	}
+	return model
 }

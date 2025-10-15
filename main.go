@@ -81,6 +81,10 @@ func main() {
 		memoryUsage := GetMemoryUsage()
 		info = append(info, fmt.Sprintf("%s %s", color.Colorize("memory:", art.Accent), memoryUsage))
 	}
+	if !IsDisabled("cpu") {
+		cpu := GetCPU()
+		info = append(info, fmt.Sprintf("%s %s", color.Colorize("cpu:", art.Accent), cpu))
+	}
 	if !IsDisabled("uptime") {
 		uptime := GetUptime()
 		info = append(info, fmt.Sprintf("%s %s", color.Colorize("uptime:", art.Accent), uptime))
