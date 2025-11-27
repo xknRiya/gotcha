@@ -395,7 +395,8 @@ func GetGPU() string {
 			}
 			for line := range strings.SplitSeq(string(ueventContent), "\n") {
 				if id, hasID := strings.CutPrefix(line, "PCI_ID="); hasID {
-					parts := strings.Split(id, ":")
+					lowerId := strings.ToLower(id)
+					parts := strings.Split(lowerId, ":")
 					if name, err := GetDeviceName(parts[0], parts[1]); err == nil {
 						return name
 					}
